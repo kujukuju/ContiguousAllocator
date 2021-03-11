@@ -59,6 +59,7 @@ const SpecificAllocator = Allocator.create(
         entry.boolValue = true;
     },
     (entry, genericName, defaultName) => {
+        console.log(entry, genericName, defaultName);
         entry.genericName = genericName;
         entry.specificName = defaultName;
         entry.allocatedMember = AllocatedMemberAllocator.claim(5);
@@ -71,6 +72,11 @@ const SpecificAllocator = Allocator.create(
 
 console.log('Claiming specificInstance1');
 const specificInstance1 = SpecificAllocator.claim('generic name!', 'default name!');
+console.log('Setting specificInstance1.floatValue');
+specificInstance1.floatValue = 1.2;
+console.log('Getting specificInstance1.floatValue', specificInstance1.floatValue);
+console.log(specificInstance1.allocatedMember);
+console.log('Getting specificInstance1.genericName', specificInstance1.genericName);
 console.log('Getting specificInstance1.allocatedMember.value', specificInstance1.allocatedMember.value);
 console.log('Getting specificInstance1.genericName', specificInstance1.genericName);
 console.log('Calling specificInstance1.method()', specificInstance1.method);

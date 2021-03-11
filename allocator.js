@@ -76,7 +76,9 @@ class Allocated {
         const index = this._nextAvailableIndex;
         this._nextAvailableIndex = this._intBuffer[this._nextAvailableIndex * this._blockSize];
 
-        this._claimer(this._accessors[index], ...args);
+        if (this._claimer) {
+            this._claimer(this._accessors[index], ...args);
+        }
 
         return this._accessors[index];
     }
@@ -95,6 +97,7 @@ class Allocated {
     }
 
     _accessInstance(index) {
+        console.log(this._accessors);
         return this._accessors[index];
     }
 
@@ -110,12 +113,12 @@ class Allocated {
         const Accessor = function() {};
         Accessor.prototype.__index = 0;
         Accessor.prototype.free = function() {
-            self.free.bind(self, this);
+            self.free.call(self, this);
         }
 
-        console.log(this._methods);
-
-        console.log(Object.getOwnPropertyNames(Accessor.prototype));
+        // console.log(this._methods);
+        //
+        // console.log(Object.getOwnPropertyNames(Accessor.prototype));
 
         for (let a = 0; a < this._methods.length; a++) {
             if (Accessor.prototype.hasOwnProperty(this._methods[a])) {
@@ -142,14 +145,16 @@ class Allocated {
 
             switch (propertyType) {
                 case 'number': {
+                    const currentPropertyOffset = propertyOffset;
+
                     Object.defineProperty(Accessor.prototype, propertyName, {
                         enumerable: false,
                         configurable: false,
                         get: function() {
-                            return self._floatBuffer[this.__index * blockSize + propertyOffset];
+                            return self._floatBuffer[this.__index * blockSize + currentPropertyOffset];
                         },
                         set: function(value) {
-                            self._floatBuffer[this.__index * blockSize + propertyOffset] = value;
+                            self._floatBuffer[this.__index * blockSize + currentPropertyOffset] = value;
                         },
                     });
 
@@ -157,14 +162,16 @@ class Allocated {
                 } break;
 
                 case 'boolean': {
+                    const currentPropertyOffset = propertyOffset;
+
                     Object.defineProperty(Accessor.__proto__, propertyName, {
                         enumerable: false,
                         configurable: false,
                         get: function() {
-                            return !!self._intBuffer[this.__index * blockSize + propertyOffset];
+                            return !!self._intBuffer[this.__index * blockSize + currentPropertyOffset];
                         },
                         set: function(value) {
-                            self._intBuffer[this.__index * blockSize + propertyOffset] = value ? 1 : 0;
+                            self._intBuffer[this.__index * blockSize + currentPropertyOffset] = value ? 1 : 0;
                         },
                     });
 
@@ -172,14 +179,16 @@ class Allocated {
                 } break;
 
                 case 'string': {
+                    const currentObjectListIndex = objectListIndex;
+
                     Object.defineProperty(Accessor.prototype, propertyName, {
                         enumerable: false,
                         configurable: false,
                         get: function() {
-                            return self._pointerList[this.__index * pointerCount + objectListIndex];
+                            return self._pointerList[this.__index * pointerCount + currentObjectListIndex];
                         },
                         set: function(value) {
-                            self._pointerList[this.__index * pointerCount + objectListIndex] = value;
+                            self._pointerList[this.__index * pointerCount + currentObjectListIndex] = value;
                         },
                     });
 
@@ -189,6 +198,7 @@ class Allocated {
                 case 'object': {
                     const allocated = className ? Allocator.hasByName(className) : false;
                     if (allocated) {
+                        const currentPropertyOffset = propertyOffset;
                         const allocatorIndex = Allocator.getIndexByName(className);
                         const allocator = Allocator.get(allocatorIndex);
 
@@ -196,23 +206,25 @@ class Allocated {
                             enumerable: false,
                             configurable: false,
                             get: function() {
-                                return allocator._accessInstance(self._intBuffer[this.__index * blockSize + propertyOffset]);
+                                return allocator._accessInstance(self._intBuffer[this.__index * blockSize + currentPropertyOffset]);
                             },
                             set: function(value) {
-                                self._intBuffer[this.__index * blockSize + propertyOffset] = value.__index;
+                                self._intBuffer[this.__index * blockSize + currentPropertyOffset] = value.__index;
                             },
                         });
 
                         propertyOffset++;
                     } else {
+                        const currentObjectListIndex = objectListIndex;
+
                         Object.defineProperty(Accessor.prototype, propertyName, {
                             enumerable: false,
                             configurable: false,
                             get: function() {
-                                return self._pointerList[this.__index * pointerCount + objectListIndex];
+                                return self._pointerList[this.__index * pointerCount + currentObjectListIndex];
                             },
                             set: function(value) {
-                                self._pointerList[this.__index * pointerCount + objectListIndex] = value;
+                                self._pointerList[this.__index * pointerCount + currentObjectListIndex] = value;
                             },
                         });
 
