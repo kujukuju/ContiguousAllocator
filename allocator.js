@@ -8,6 +8,7 @@ class Allocated {
 
     _type;
     _count;
+    _initialized;
 
     _constructor;
     _claimer;
@@ -22,36 +23,49 @@ class Allocated {
 
     _accessorClass;
 
-    constructor(type, constructor, claimer, deconstructor, count) {
+    // have to use a non native constructor because of static time initialization stuff
+    construct(type, constructor, claimer, deconstructor, count) {
         const [valueCount, pointerCount] = Allocated._getAllocationTypeCounts(type);
 
-        this._blockSize = valueCount + 1;
+        this._blockSize = Math.ceil((valueCount + 1) / 2.0) * 2;
         this._pointerCount = pointerCount;
 
         this._buffer = new ArrayBuffer(this._blockSize * count * 4);
         this._floatBuffer = new Float32Array(this._buffer);
         this._intBuffer = new Int32Array(this._buffer);
+        this._doubleBuffer = new Float64Array(this._buffer);
 
         this._type = type;
         this._count = count;
-
-        this._constructor = constructor;
-        this._claimer = claimer;
-        this._deconstructor = deconstructor;
+        this._initialized = false;
 
         this._pointerList = new Array(this._pointerCount * count);
         this._methods = Allocated._getMethods(type);
 
         this._nextAvailableIndex = 0;
         this._accessors = new Array(count);
+    }
 
-        this._accessorClass = this._constructAccessorClass(type);
+    initialize(constructor, claimer, deconstructor) {
+        this._constructor = constructor;
+        this._claimer = claimer;
+        this._deconstructor = deconstructor;
 
-        this._constructElements(0, count);
+        this._accessorClass = this._constructAccessorClass(this._type);
+
+        this._constructElements(0, this._count);
+
+        this._initialized = true;
     }
 
     claim(...args) {
+        if (!this._initialized) {
+            console.error('You must initialize the allocator first. Type: ', this._type.constructor.name);
+            return;
+        }
+
         if (this._nextAvailableIndex === -1) {
+            console.warn('Resizing allocator. This is bad. You should initialize it larger. Type: ', this._type.constructor.name);
             const newCount = this._count * 2;
 
             const newBuffer = new ArrayBuffer(this._blockSize * newCount * 4);
@@ -97,7 +111,6 @@ class Allocated {
     }
 
     _accessInstance(index) {
-        console.log(this._accessors);
         return this._accessors[index];
     }
 
@@ -109,16 +122,16 @@ class Allocated {
         const self = this;
         const blockSize = this._blockSize;
         const pointerCount = this._pointerCount;
+        const name = this._type.constructor.name;
 
         const Accessor = function() {};
         Accessor.prototype.__index = 0;
         Accessor.prototype.free = function() {
             self.free.call(self, this);
         }
-
-        // console.log(this._methods);
-        //
-        // console.log(Object.getOwnPropertyNames(Accessor.prototype));
+        Accessor.prototype.type = function() {
+            return name;
+        }
 
         for (let a = 0; a < this._methods.length; a++) {
             if (Accessor.prototype.hasOwnProperty(this._methods[a])) {
@@ -145,20 +158,40 @@ class Allocated {
 
             switch (propertyType) {
                 case 'number': {
-                    const currentPropertyOffset = propertyOffset;
+                    if (Math.abs(type[propertyName]) > 0xffffffff) {
+                        if (propertyOffset % 2 === 1) {
+                            propertyOffset++;
+                        }
+                        const currentPropertyOffset = propertyOffset / 2;
 
-                    Object.defineProperty(Accessor.prototype, propertyName, {
-                        enumerable: false,
-                        configurable: false,
-                        get: function() {
-                            return self._floatBuffer[this.__index * blockSize + currentPropertyOffset];
-                        },
-                        set: function(value) {
-                            self._floatBuffer[this.__index * blockSize + currentPropertyOffset] = value;
-                        },
-                    });
+                        Object.defineProperty(Accessor.prototype, propertyName, {
+                            enumerable: false,
+                            configurable: false,
+                            get: function () {
+                                return self._doubleBuffer[this.__index * blockSize / 2 + currentPropertyOffset];
+                            },
+                            set: function (value) {
+                                self._doubleBuffer[this.__index * blockSize / 2 + currentPropertyOffset] = value;
+                            },
+                        });
 
-                    propertyOffset++;
+                        propertyOffset += 2;
+                    } else {
+                        const currentPropertyOffset = propertyOffset;
+
+                        Object.defineProperty(Accessor.prototype, propertyName, {
+                            enumerable: false,
+                            configurable: false,
+                            get: function () {
+                                return self._floatBuffer[this.__index * blockSize + currentPropertyOffset];
+                            },
+                            set: function (value) {
+                                self._floatBuffer[this.__index * blockSize + currentPropertyOffset] = value;
+                            },
+                        });
+
+                        propertyOffset++;
+                    }
                 } break;
 
                 case 'boolean': {
@@ -277,6 +310,15 @@ class Allocated {
                 const className = type[propertyName].constructor.name;
                 switch (propertyType) {
                     case 'number':
+                        if (Math.abs(type[propertyName]) > 0xffffffff) {
+                            if (value % 2 === 1) {
+                                value++;
+                            }
+                            value += 2;
+                        } else {
+                            value++;
+                        }
+                        break;
                     case 'boolean':
                         value++;
                         break;
@@ -350,7 +392,8 @@ class Allocator {
 
         count = count || 512;
 
-        const allocator = new Allocated(type, constructor, claimer, deconstructor, count);
+        const allocator = new Allocated();
+        allocator.construct(type, constructor, claimer, deconstructor, count);
         Allocator._ALLOCATORS.push(allocator);
         Allocator._ALLOCATORS_BY_NAME.set(typeName, allocator);
         Allocator._ALLOCATORS_INDICES_BY_NAME.set(typeName, Allocator._ALLOCATORS.length - 1);
