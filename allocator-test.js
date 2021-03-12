@@ -26,17 +26,6 @@ class GenericComponent extends DumbBase {
 
 const AllocatedMemberAllocator = Allocator.create(
     new AllocatedMember(),
-    (entry) => {
-        entry.value = 1;
-        entry.testArray = [0, 1, 2];
-    },
-    (entry, value) => {
-        entry.value = value;
-        entry.testArray[0] = 1;
-        entry.testArray[1] = 2;
-        entry.testArray[2] = 3;
-    },
-    null,
     2);
 
 class SpecificComponent extends GenericComponent {
@@ -49,7 +38,22 @@ class SpecificComponent extends GenericComponent {
 }
 
 const SpecificAllocator = Allocator.create(
-    new SpecificComponent(),
+    new SpecificComponent());
+
+AllocatedMemberAllocator.initialize(
+    (entry) => {
+        entry.value = 1;
+        entry.testArray = [0, 1, 2];
+    },
+    (entry, value) => {
+        entry.value = value;
+        entry.testArray[0] = 1;
+        entry.testArray[1] = 2;
+        entry.testArray[2] = 3;
+    },
+    null);
+
+SpecificAllocator.initialize(
     (entry) => {
         // string defaults don't matter
         entry.genericName = 'Generic Name';
